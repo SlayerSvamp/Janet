@@ -28,7 +28,6 @@ namespace Janet
         public Guid SessionId { get; set; }
         public string Name { get; set; }
         public string State { get; set; }
-        // public bool AllowSpectators { get; set; }
         public DateTime Created { get; set; }
         public DateTime Updated { get; set; }
 

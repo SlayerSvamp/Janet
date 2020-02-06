@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Janet.Contracts;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -9,7 +11,7 @@ using Microsoft.Extensions.Logging;
 namespace Janet.Controllers
 {
     [ApiController]
-    [Route("[controller]")]
+    [Route("api/[controller]")]
     public class AdminController : ControllerBase
     {
         private readonly ILogger<AdminController> _logger;
@@ -21,7 +23,12 @@ namespace Janet.Controllers
             _context = context;
         }
 
-        [HttpGet("game")]
+        /// <summary>
+        /// This is my very special description
+        /// </summary>
+        /// <example>10</example>
+        [HttpGet("games")]
+        [ProducesResponseType(typeof(List<Game>), StatusCodes.Status200OK)]
         public IActionResult ListGames()
         {
             var games = _context.Games
@@ -48,40 +55,46 @@ namespace Janet.Controllers
             return Ok(games);
         }
 
-        [HttpGet("game/{id}")]
-        public IActionResult GetGame(Guid id)
+        [HttpGet("games/{gameId}")]
+        [ProducesResponseType(typeof(Game), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public IActionResult GetGame([FromQuery]Guid gameId)
         {
-            var game = _context.Games.Find(id);
-            if (game != null)
-                return Ok(game);
-            return NotFound();
+            var game = _context.Games.Find(gameId);
+            if (game == null)
+                return NotFound();
+
+            return Ok(game);
         }
 
-        [HttpGet("game/create/{name}")]
-        public IActionResult CreateGame(string name)
+        [HttpPost("games")]
+        [ProducesResponseType(typeof(Game), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public IActionResult CreateGame([FromBody]CreateGameDTO dto)
         {
-            if (name != null && name.Length > 0)
-            {
-                var game = new Game { Name = name };
-                _context.Games.Add(game);
-                _context.SaveChanges();
+            if (string.IsNullOrEmpty(dto.GameName))
+                return BadRequest();
 
-                return Ok(game);
-            }
-            return BadRequest("Game must have a name");
+            var game = new Game { Name = dto.GameName };
+            _context.Games.Add(game);
+            _context.SaveChanges();
+
+            return Ok(game);
         }
 
-        [HttpGet("game/delete/{id}")]
-        public IActionResult DeleteGame(Guid id)
+        [HttpDelete("games/{gameId}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public IActionResult DeleteGame([FromQuery]Guid gameId)
         {
-            var game = _context.Games.Find(id);
-            if (game != null)
-            {
-                _context.Games.Remove(game);
-                _context.SaveChanges();
-                return Ok();
-            }
-            return NotFound();
+            var game = _context.Games.Find(gameId);
+            if (game == null)
+                return NotFound();
+
+            _context.Games.Remove(game);
+            _context.SaveChanges();
+
+            return Ok();
         }
     }
 }

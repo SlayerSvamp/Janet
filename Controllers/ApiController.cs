@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using Janet.Contracts;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,43 +36,60 @@ namespace Janet.Controllers
         }
 
         [HttpGet("guid")]
-        public string GetGuid() => Guid.NewGuid().ToString();
+        [ProducesResponseType(typeof(Guid), StatusCodes.Status200OK)]
+        public IActionResult GetGuid() => Ok(Guid.NewGuid().ToString());
 
-        [HttpGet("game/{gameId}/{sessionId}/{playerId}")]
-        public IActionResult GetSession(Guid gameId, Guid sessionId, Guid playerId)
+        [HttpGet("sessions/{gameId}")]
+        [ProducesResponseType(typeof(List<Session>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public IActionResult GetSessions([FromQuery]Guid gameId)
         {
             var session = _context.Sessions
                 .Include(session => session.Players)
-                .Where(session => session.GameId == gameId)
+                .FirstOrDefault(session => session.GameId == gameId);
+
+            if (session == null)
+                return NotFound();
+
+            return SessionToModel(session);
+        }
+
+        [HttpGet("sessions/{sessionId}")]
+        [ProducesResponseType(typeof(Session), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public IActionResult GetSession([FromQuery]Guid sessionId)
+        {
+            var session = _context.Sessions
+                .Include(session => session.Players)
                 .FirstOrDefault(session => session.SessionId == sessionId);
 
             if (session == null)
                 return NotFound();
 
-            if (/*!session.AllowSpectators && */ !session.Players.Any(player => player.PlayerId == playerId))
-                return Unauthorized();
-
             return SessionToModel(session);
         }
 
-        [HttpGet("game/new/{gameId}/{sessionName}/{playerName}")]
-        public IActionResult CreateSession(Guid gameId, string sessionName, string playerName)
+        [HttpPost("sessions")]
+        [ProducesResponseType(typeof(Session), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public IActionResult CreateSession([FromBody]CreateSessionDTO dto)
         {
-            var game = _context.Games.Find(gameId);
+            var game = _context.Games.Find(dto.GameId);
             if (game == null)
-                return NotFound("Game does not exist");
+                return NotFound();
 
             var now = DateTime.Now;
             var session = new Session
             {
-                Name = sessionName,
+                Name = dto.SessionName,
+                State = dto.InitialState,
                 Created = now,
                 Updated = now,
             };
 
             var player = new Player
             {
-                Name = playerName,
+                Name = dto.PlayerName,
                 Operator = true,
             };
 
@@ -80,22 +100,42 @@ namespace Janet.Controllers
             return SessionToModel(session);
         }
 
-        [HttpGet("game/join/{gameId}/{sessionId}/{playerName}")]
-        public IActionResult JoinSession(Guid gameId, Guid sessionId, string playerName)
+        [HttpPut("sessions/state")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public IActionResult UpdateSession([FromBody]UpdateSessionDTO dto)
         {
-            if (playerName.Length == 0)
+            var session = _context.Sessions.Find(dto.SessionId);
+            if (session == null)
+                return NotFound();
+
+            session.State = dto.State;
+            session.Updated = DateTime.Now;
+
+            _context.SaveChanges();
+
+            return Ok();
+        }
+
+        [HttpPost("sessions/join")]
+        [ProducesResponseType(typeof(Session), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public IActionResult JoinSession([FromBody]JoinSessionDTO dto)
+        {
+            if (dto.PlayerName.Length == 0)
                 return BadRequest();
 
             var session = _context.Sessions
                 .Include(session => session.Players)
-                .FirstOrDefault(session => session.GameId == gameId && session.SessionId == sessionId);
+                .FirstOrDefault(session => session.SessionId == dto.SessionId);
 
             if (session == null)
                 return NotFound();
 
             session.Players.Add(new Player
             {
-                Name = playerName,
+                Name = dto.PlayerName,
                 Operator = false,
             });
 
@@ -103,7 +143,25 @@ namespace Janet.Controllers
 
             _context.SaveChanges();
 
-            return SessionToModel(session);
+            return Ok(session);
+        }
+
+        [HttpDelete("sessions/leave")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public IActionResult LeaveSession([FromBody]LeaveSessionDTO dto)
+        {
+            var player = _context.Players
+                .Where(player => player.SessionId == dto.SessionId)
+                .SingleOrDefault(player => player.PlayerId == dto.PlayerId);
+
+            if (player == null)
+                return NotFound();
+
+            _context.Players.Remove(player);
+            _context.SaveChanges();
+
+            return Ok();
         }
     }
 }
