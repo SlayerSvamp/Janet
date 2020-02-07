@@ -51,7 +51,7 @@ namespace Janet.Controllers
             if (session == null)
                 return NotFound();
 
-            return SessionToModel(session);
+            return Ok(session);
         }
 
         [HttpGet("sessions/{sessionId}")]
@@ -66,7 +66,7 @@ namespace Janet.Controllers
             if (session == null)
                 return NotFound();
 
-            return SessionToModel(session);
+            return Ok(session);
         }
 
         [HttpPost("sessions")]
@@ -97,7 +97,7 @@ namespace Janet.Controllers
             session.Players.Add(player);
             _context.SaveChanges();
 
-            return SessionToModel(session);
+            return Ok(session);
         }
 
         [HttpPut("sessions/state")]
